@@ -108,6 +108,50 @@ void pmc_hw_error_isr(void *private, SsxIrqId irq, int priority);
 //mode interrupt handler
 SSX_IRQ_FAST2FULL(pmc_hw_error_fast, pmc_hw_error_isr);
 
+struct nest_scom_val {
+	uint32_t	scom;
+	uint64_t	value;
+};
+
+struct nest_scom_val power8_nest_scoms[] = {
+	{0x2010c69, 0x0b00500000f0f0f0},        //NEST_PB_EVENT_SEL
+	{0x2013416, 0x0000014030000000},        //NEST_MCD_EVENT_SEL
+	{0x02011d89, 0x0000000000000000},       //NEST_MC3_MCS1_MCSMODE2
+	{0x02011d09, 0x0000000000000000},       //NEST_MC3_MCS0_MCSMODE2
+	{0x02011c89, 0x0000000000000000},       //NEST_MC2_MCS1_MCSMODE2
+	{0x02011c09, 0x0000000000000000},       //NEST_MC2_MCS0_MCSMODE2
+	{0x02011989, 0x0000000000000000},       //NEST_MC1_MCS1_MCSMODE2
+	{0x02011909, 0x0000000000000000},       //NEST_MC1_MCS0_MCSMODE2
+	{0x02011889, 0x0000000000000000},       //NEST_MC0_MCS1_MCSMODE2
+	{0x02011809, 0x0000000000000000},       //NEST_MC0_MCS0_MCSMODE2
+	{0x02011d1b, 0x0010060080000000},       //NEST_MC3_MCS0_MCEBUSEN
+	{0x02011d9b, 0x0010060080000000},       //NEST_MC3_MCS1_MCEBUSEN
+	{0x02011c1b, 0x0010060080000000},       //NEST_MC2_MCS0_MCEBUSEN
+	{0x02011c9b, 0x0010060080000000},       //NEST_MC2_MCS1_MCEBUSEN
+	{0x0201191b, 0x0010060080000000},       //NEST_MC1_MCS0_MCEBUSEN
+	{0x0201199b, 0x0010060080000000},       //NEST_MC1_MCS1_MCEBUSEN
+	{0x0201181b, 0x0010060080000000},       //NEST_MC0_MCS0_MCEBUSEN
+	{0x0201189b, 0x0010060080000000},       //NEST_MC0_MCS1_MCEBUSEN
+	{0x2010c68, 0x8055eaaaaa2a0000},        //NEST_PB_PMU
+	{0,0}
+};
+
+uint64_t chk_scom;
+
+int program_nest_counter_scoms()
+{
+	int rc=0, i=0;
+
+	while (power8_nest_scoms[i].scom != 0) {
+		rc = putscom(power8_nest_scoms[i].scom, power8_nest_scoms[i].value);
+		if (rc)
+			return rc;
+		i++;
+	}
+	return 0;
+}
+
+
 // TODO: Verify whether the workaround is still needed.
 /*
  * Function Specification
@@ -1230,6 +1274,10 @@ int main(int argc, char **argv)
         // Commit Error log
         REQUEST_RESET(l_err);
     }
+ 
+    //Nest data colection
+    if (!program_nest_counter_scoms())
+	chk_scom = 1;
 
     // Enter SSX Kernel
     ssx_start_threads();

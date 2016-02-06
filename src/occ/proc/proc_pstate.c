@@ -40,6 +40,7 @@
 #include "proc_pstate.h"
 #include "scom.h"
 #include "amec_sys.h"
+#include <pgp_pmc.h>
 
 // GPSM DCM Synchronization States
 typedef enum
@@ -77,9 +78,11 @@ bool G_isDcm      = FALSE;
 
 // Used for Sapphire
 DMA_BUFFER( sapphire_table_t G_sapphire_table ) = {{0}};
+DMA_BUFFER( sapphire_nest_data_t G_nest_data_table ) = {{0}};
 
 //KVM throttle reason coming from the frequency voting box.
 extern uint8_t G_amec_kvm_throt_reason;
+extern uint64_t chk_scom;
 
 // Set DCM Sync State
 void proc_gpsm_dcm_sync_set_state(eProcGpsmDcmSyncStates i_dcm_sync_state);
@@ -944,6 +947,7 @@ void populate_pstate_to_sapphire_tbl()
     }
 
     memset(&G_sapphire_table, 0, sizeof(sapphire_table_t));
+    memset(&G_nest_data_table, 0, sizeof(sapphire_nest_data_t));
 
     l_gpst_ptr = gpsm_gpst();
     const int8_t l_pmax = (int8_t) l_gpst_ptr->pmin + l_gpst_ptr->entries - 1;
@@ -1096,6 +1100,145 @@ void populate_sapphire_tbl_to_mem()
     }
 }
 
+void populate_sensor_tbl_to_mem()
+{
+    int l_ssxrc = SSX_OK, i, rc=0;
+    uint32_t l_reasonCode = 0;
+    uint32_t l_extReasonCode = 0;
+    uint64_t pmulet0=0, pmulet1=0, pmulet2=0, pmulet3=0;
+    uint64_t mcs0, mcs1, mcs2, mcs3;
+    uint64_t tmp0, tmp1, tmp2, tmp3;
+    BceRequest pba_copy;
+
+    if (!chk_scom)
+	return;
+
+    G_nest_data_table.magic = 0x4f505f4e455354; // ASCII "OP_NEST"
+    G_nest_data_table.ver = 0x1;
+    G_nest_data_table.unit_map = 0x3;
+    G_nest_data_table.heartbeat++;
+
+    //Now lets do the data processing only once in 4 heartbeat;
+    if ((G_nest_data_table.heartbeat % 4) == 0) {
+	//Gets the scom values from the pmulets;
+	rc = getscom(0x02010C54, &pmulet0);
+	if (rc)
+		return;
+
+	rc = getscom(0x02010C55, &pmulet1);
+	if (rc)
+		return;
+
+	rc = getscom(0x02010C56, &pmulet2);
+	if (rc)
+		return;
+
+	rc = getscom(0x02010C57, &pmulet3);
+	if (rc)
+		return;
+
+
+	//Now that we have got the counter values, lets process them
+	//Get the MCS Read data
+	mcs0 = pmulet3 & PMULET_COUNTER_2_MASK;
+	mcs1 = pmulet1 & PMULET_COUNTER_2_MASK;
+	mcs2 = pmulet0 & PMULET_COUNTER_2_MASK;
+	mcs3 = pmulet2 & PMULET_COUNTER_2_MASK;
+	G_nest_data_table.mcs0_read += mcs0;
+	G_nest_data_table.mcs1_read += mcs1;
+	G_nest_data_table.mcs2_read += mcs2;
+	G_nest_data_table.mcs3_read += mcs3;
+	//Get the MCS Write data
+	tmp0 = pmulet3 & PMULET_COUNTER_3_MASK;
+	mcs0 = tmp0 << 16;
+	tmp1 = pmulet1 & PMULET_COUNTER_3_MASK;
+	mcs1 = tmp1 << 16;
+	tmp2 = pmulet0 & PMULET_COUNTER_3_MASK;
+	mcs2 = tmp2 << 16;
+	tmp3 = pmulet2 & PMULET_COUNTER_3_MASK;
+	mcs3 = tmp3 << 16;
+	G_nest_data_table.mcs0_write += mcs0;
+	G_nest_data_table.mcs1_write += mcs1;
+	G_nest_data_table.mcs2_write += mcs2;
+	G_nest_data_table.mcs3_write += mcs3;
+
+	//Update powerbus cycle count for ref
+	//reusing varibles
+	tmp0 = (uint64_t)0xFFFF <<48;
+	mcs0 = pmulet0 & tmp0;
+	mcs1 = mcs0 >> 32;
+	G_nest_data_table.pb_cyc += mcs1;
+
+	do
+	{
+		l_ssxrc = bce_request_create(&pba_copy,                          // block copy object
+					 &G_pba_bcue_queue,                  // sram to mainstore copy engine
+					 0x320000,           // mainstore address
+					 (uint32_t) &G_nest_data_table,       // sram starting address
+					 (size_t) sizeof(G_nest_data_table),  // size of copy
+					 SSX_WAIT_FOREVER,                   // no timeout
+					 NULL,                               // call back
+					 NULL,                               // call back arguments
+					 ASYNC_REQUEST_BLOCKING              // callback mask
+					 );
+		if(l_ssxrc != SSX_OK)
+		{
+			TRAC_ERR("populate_sapphire_tbl_to_mem: PBA request create failure rc=[%08X]", -l_ssxrc);
+			/*
+			* @errortype
+			* @moduleid    MAIN_STATE_TRANSITION_MID
+			* @reasoncode  SSX_GENERIC_FAILURE
+			* @userdata1   RC for PBA block-copy engine
+			* @userdata4   ERC_BCE_REQUEST_CREATE_FAILURE
+			* @devdesc     SSX BCE related failure
+			*/
+			l_reasonCode = SSX_GENERIC_FAILURE;
+			l_extReasonCode = ERC_BCE_REQUEST_CREATE_FAILURE;
+			break;
+		}
+
+		// Do actual copying
+		l_ssxrc = bce_request_schedule(&pba_copy);
+
+		if(l_ssxrc != SSX_OK)
+		{
+			TRAC_ERR("populate_sapphire_tbl_to_mem: PBA request schedule failure rc=[%08X]", -l_ssxrc);
+			/*
+			* @errortype
+			* @moduleid    MAIN_STATE_TRANSITION_MID
+			* @reasoncode  SSX_GENERIC_FAILURE
+			* @userdata1   RC for PBA block-copy engine
+			* @userdata4   ERC_BCE_REQUEST_SCHEDULE_FAILURE
+			* @devdesc     Failed to copy data by using DMA
+			*/
+			l_reasonCode = SSX_GENERIC_FAILURE;
+			l_extReasonCode = ERC_BCE_REQUEST_SCHEDULE_FAILURE;
+			break;
+		}
+	} while(0);
+
+	if ( l_ssxrc != SSX_OK )
+	{
+		errlHndl_t l_errl = createErrl(MAIN_STATE_TRANSITION_MID,    //modId
+			       l_reasonCode,                 //reasoncode
+			       l_extReasonCode,              //Extended reason code
+                                       ERRL_SEV_UNRECOVERABLE,       //Severity
+                                       NULL,                         //Trace Buf
+                                       0,                            //Trace Size
+                                       -l_ssxrc,                     //userdata1
+                                       0);                           //userdata2
+
+		// Callout firmware
+		addCalloutToErrl(l_errl,
+                         ERRL_CALLOUT_TYPE_COMPONENT_ID,
+                         ERRL_COMPONENT_ID_FIRMWARE,
+                         ERRL_CALLOUT_PRIORITY_HIGH);
+
+		commitErrl(&l_errl);
+	}
+    }
+}
+
 // Function Specification
 //
 // Name: proc_check_for_sapphire_updates
@@ -1127,4 +1270,5 @@ void proc_check_for_sapphire_updates()
         G_sapphire_table.config.valid = 0x01; //default 0x01
         populate_sapphire_tbl_to_mem();
     }
+    populate_sensor_tbl_to_mem();
 }
