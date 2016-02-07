@@ -93,7 +93,7 @@ typedef struct __attribute__ ((packed))
 	uint64_t	magic;
 
 	//Microcode Version
-	uint16_t        ver;
+	uint32_t        ver;
 
 	//Nest Units supported by the microcode
 	//Each bit represents a unit or function of a unit.
@@ -103,7 +103,7 @@ typedef struct __attribute__ ((packed))
 	uint32_t        unit_map;
 
 	//Periodic ticks by the nest thread
-	uint32_t        heartbeat;
+	uint64_t        heartbeat;
 
 	//Counter data
 	//MCS Read
@@ -120,7 +120,7 @@ typedef struct __attribute__ ((packed))
 	uint64_t	pb_cyc;
 
 	//future use
-	char    pad[38];
+	char    pad[32];
 } sapphire_nest_data_t __attribute__ ((aligned (128)));
 
 enum {
