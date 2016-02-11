@@ -40,6 +40,7 @@
 #include "proc_pstate.h"
 #include "scom.h"
 #include "amec_sys.h"
+#include "nest_microcode.h"
 #include <pgp_pmc.h>
 
 // GPSM DCM Synchronization States
@@ -1113,27 +1114,27 @@ void populate_sensor_tbl_to_mem()
     if (!chk_scom)
 	return;
 
-    G_nest_data_table.magic = 0x4f505f4e455354; // ASCII "OP_NEST"
-    G_nest_data_table.ver = 0x1;
-    G_nest_data_table.unit_map = 0x3;
+    G_nest_data_table.magic = NEST_MICROCODE_MAGIC;
+    G_nest_data_table.ver = NEST_MICROCODE_VERSION;
+    G_nest_data_table.unit_map = NEST_MICROCODE_UNIT_MAP;
     G_nest_data_table.heartbeat++;
 
     //Now lets do the data processing only once in 4 heartbeat;
     if ((G_nest_data_table.heartbeat % 4) == 0) {
 	//Gets the scom values from the pmulets;
-	rc = getscom(0x02010C54, &pmulet0);
+	rc = getscom(NEST_PMU_SCOM1, &pmulet0);
 	if (rc)
 		return;
 
-	rc = getscom(0x02010C55, &pmulet1);
+	rc = getscom(NEST_PMU_SCOM2, &pmulet1);
 	if (rc)
 		return;
 
-	rc = getscom(0x02010C56, &pmulet2);
+	rc = getscom(NEST_PMU_SCOM3, &pmulet2);
 	if (rc)
 		return;
 
-	rc = getscom(0x02010C57, &pmulet3);
+	rc = getscom(NEST_PMU_SCOM4, &pmulet3);
 	if (rc)
 		return;
 
@@ -1173,7 +1174,7 @@ void populate_sensor_tbl_to_mem()
 	{
 		l_ssxrc = bce_request_create(&pba_copy,                          // block copy object
 					 &G_pba_bcue_queue,                  // sram to mainstore copy engine
-					 0x320000,           // mainstore address
+					 NEST_HOMER_OFFSET,           // mainstore address
 					 (uint32_t) &G_nest_data_table,       // sram starting address
 					 (size_t) sizeof(G_nest_data_table),  // size of copy
 					 SSX_WAIT_FOREVER,                   // no timeout
