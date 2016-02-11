@@ -84,45 +84,6 @@ typedef struct __attribute__ ((packed))
     uint8_t              pad[100];                          //Whatever is needed to make size a multiple of 128
 } sapphire_table_t __attribute__ ((aligned (128)));
 
-#define PMULET_COUNTER_2_MASK	0xFFFF0000
-#define PMULET_COUNTER_3_MASK	0xFFFF
-
-typedef struct __attribute__ ((packed))
-{
-	//Microcde magic -- ASCII "OP_NEST"
-	uint64_t	magic;
-
-	//Microcode Version
-	uint32_t        ver;
-
-	//Nest Units supported by the microcode
-	//Each bit represents a unit or function of a unit.
-	//This microcode supports only two functions of MC (read and write BW)
-	// unit_map = 0x3  
-	// (PowerPC MSB, bit 63 - MCS_READ, bit 62 - MCS_WRITE)
-	uint32_t        unit_map;
-
-	//Periodic ticks by the nest thread
-	uint64_t        heartbeat;
-
-	//Counter data
-	//MCS Read
-	uint64_t        mcs0_read;
-	uint64_t        mcs1_read;
-	uint64_t        mcs2_read;
-	uint64_t        mcs3_read;
-
-	//MCS Write
-	uint64_t        mcs0_write;
-	uint64_t        mcs1_write;
-	uint64_t        mcs2_write;
-	uint64_t        mcs3_write;
-	uint64_t	pb_cyc;
-
-	//future use
-	char    pad[32];
-} sapphire_nest_data_t __attribute__ ((aligned (128)));
-
 enum {
     NO_THROTTLE = 0x00,
     POWERCAP = 0x01,
