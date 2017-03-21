@@ -1,0 +1,126 @@
+//////////////////////////////////////////////////////////////////////
+// Includes
+//////////////////////////////////////////////////////////////////////
+.nolist
+#include "pgp.h"
+#include "pgas.h"
+.list
+
+//////////////////////////////////////////////////////////////////////
+// Define Address Space
+//////////////////////////////////////////////////////////////////////
+.oci
+
+//Memory copy structure
+	.struct 0
+DEST:
+	.struct DEST + 8
+SRC:
+	.struct SRC + 8
+DW:
+//////////////////////////////////////////////////////////////////////
+// Define Symbols
+//////////////////////////////////////////////////////////////////////
+
+#include <pss_constants.h>
+#define GPE_PROG_ID 0x0004
+
+.data
+	.set	cb_status,	0x32FC00
+	.set	cb_uav,		0x32FC18
+	.set	UAV_VALUE,	0x7800000000000000
+	.set	MC_STATUS,	0x0000000000000001
+
+defparams:
+	.quad	0x0000000040020020
+	.quad	0x8000000000000000
+	.quad	0x7f1edff01fffffff
+	.quad	0x8000000000000000
+	.quad	0x0800000000000000
+	.quad	0x0000000000000000
+
+
+//////////////////////////////////////////////////////////////////////
+// Begin Program
+//////////////////////////////////////////////////////////////////////
+
+.text
+
+#include <gpe_macros.h>
+#include <pss_macros.h>
+
+//--------------------------------------------------------------------
+// PORE-GPE Routine Specification:
+//
+// Name: GPE_nest_initialize_PMUlets
+//
+// End PORE-GPE Routine Specification
+//--------------------------------------------------------------------
+.global GPE_nest_initialize_PMUlets
+GPE_nest_initialize_PMUlets:
+
+	_putscom 0x02010c69, 0x0b00500000f0f0f0
+	_putscom 0x02013416, 0x0000014030000000
+	_putscom 0x02011d89, 0x0000000000000000
+	_putscom 0x02011d09, 0x0000000000000000
+	_putscom 0x02011c89, 0x0000000000000000
+	_putscom 0x02011c09, 0x0000000000000000
+	_putscom 0x02011989, 0x0000000000000000
+	_putscom 0x02011909, 0x0000000000000000
+	_putscom 0x02011889, 0x0000000000000000
+	_putscom 0x02011809, 0x0000000000000000
+	_putscom 0x02011d1b, 0x0010060080000000
+	_putscom 0x02011d9b, 0x0010060080000000
+	_putscom 0x02011c1b, 0x0010060080000000
+	_putscom 0x02011c9b, 0x0010060080000000
+	_putscom 0x0201191b, 0x0010060080000000
+	_putscom 0x0201199b, 0x0010060080000000
+	_putscom 0x0201181b, 0x0010060080000000
+	_putscom 0x0201189b, 0x0010060080000000
+	_putscom 0x02010c68, 0x8055eaaaaa2a0000
+
+	la	A0, defparams
+	bsr	gpe_pba_reset
+	la	A0, defparams
+	bsr	gpe_pba_setup
+
+	li	D0, cb_status
+	li	D1, MC_STATUS
+	mr	A0, D0
+	std	D1, 0, A0
+	li	D0, cb_uav
+	li	D1, UAV_VALUE
+	mr	A0, D0
+	std	D1, 0, A0
+
+	la	A0, defparams
+	bsr	gpe_pba_setup
+	halt
+
+
+.global GPE_memcpy
+GPE_memcpy:
+	la	A0, defparams
+	bsr	gpe_pba_reset
+	la	A0, defparams
+	bsr	gpe_pba_setup
+
+	mr	A1, ETR
+	ld	D0, DW, A1
+	mr	CTR, D0
+
+	ld	D0, SRC, A1
+	mr	A0, D0
+	ld	D0, DEST, A1
+	mr	A1, D0
+	bra 2f
+1:	ld	D0, 0, A0
+	std	D0, 0, A1
+	adds	A0, A0, 8
+	adds	A1, A1, 8
+2:	loop 1b
+
+	la	A0, defparams
+	bsr	gpe_pba_reset
+
+	halt

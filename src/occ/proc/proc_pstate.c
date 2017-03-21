@@ -81,6 +81,11 @@ bool G_isDcm      = FALSE;
 
 // Used for Sapphire
 DMA_BUFFER( sapphire_table_t G_sapphire_table ) = {{0}};
+DMA_BUFFER( sapphire_nest_data_up_t G_nest_data_up_table ) = {{0}};
+DMA_BUFFER( sapphire_nest_data_down_t G_nest_data_down_table ) = {{0}};
+PoreFlex G_memcpy_request;
+uint64_t G_heartbeat;
+DMA_BUFFER( GPE_memcopy G_gpe_memcpy ) = {{0}};
 
 //KVM throttle reason coming from the frequency voting box.
 extern uint8_t G_amec_kvm_throt_reason;
@@ -991,6 +996,9 @@ void populate_pstate_to_sapphire_tbl()
     }
 
     memset(&G_sapphire_table, 0, sizeof(sapphire_table_t));
+    memset(&G_nest_data_up_table, 0, sizeof(sapphire_nest_data_up_t));
+    memset(&G_nest_data_down_table, 0, sizeof(sapphire_nest_data_down_t));
+    memset(&G_gpe_memcpy, 0, sizeof(GPE_memcopy));
 
     l_gpst_ptr = gpsm_gpst();
     const int8_t l_pmax = (int8_t) l_gpst_ptr->pmin + l_gpst_ptr->entries - 1;
@@ -1165,6 +1173,79 @@ void populate_sapphire_tbl_to_mem()
         commitErrl(&l_errl);
     }
 }
+
+void populate_sensor_tbl_to_mem()
+{
+	int l_ssxrc = SSX_OK, i, rc=0;
+	uint32_t l_reasonCode = 0;
+	uint32_t l_extReasonCode = 0;
+	uint64_t pmulet0=0, pmulet1=0, pmulet2=0, pmulet3=0;
+	uint64_t mcs0, mcs1, mcs2, mcs3;
+	uint64_t tmp0, tmp1, tmp2, tmp3;
+
+	G_heartbeat++;
+	if (!G_heartbeat)
+		G_heartbeat++;
+
+	if ((G_heartbeat % 12) == 0) {
+		//Gets the scom values from the pmulets;
+		rc = getscom(NEST_PMU_SCOM1, &pmulet0);
+		if (rc)
+			return;
+
+		rc = getscom(NEST_PMU_SCOM2, &pmulet1);
+		if (rc)
+			return;
+
+		rc = getscom(NEST_PMU_SCOM3, &pmulet2);
+		if (rc)
+			return;
+
+		rc = getscom(NEST_PMU_SCOM4, &pmulet3);
+		if (rc)
+			return;
+
+
+		//Now that we have got the counter values, lets process them
+		//Get the MCS Read data
+		mcs0 = pmulet3 & PMULET_COUNTER_2_MASK;
+		mcs1 = pmulet1 & PMULET_COUNTER_2_MASK;
+		mcs2 = pmulet0 & PMULET_COUNTER_2_MASK;
+		mcs3 = pmulet2 & PMULET_COUNTER_2_MASK;
+		G_nest_data_up_table.count2 = G_heartbeat;
+		G_nest_data_up_table.mcs0_up += mcs0;
+		G_nest_data_up_table.mcs1_up += mcs1;
+		G_nest_data_up_table.mcs2_up += mcs2;
+		G_nest_data_up_table.mcs3_up += mcs3;
+		//Get the MCS Write data
+		tmp0 = pmulet3 & PMULET_COUNTER_3_MASK;
+		mcs0 = tmp0 << 16;
+		tmp1 = pmulet1 & PMULET_COUNTER_3_MASK;
+		mcs1 = tmp1 << 16;
+		tmp2 = pmulet0 & PMULET_COUNTER_3_MASK;
+		mcs2 = tmp2 << 16;
+		tmp3 = pmulet2 & PMULET_COUNTER_3_MASK;
+		mcs3 = tmp3 << 16;
+		G_nest_data_down_table.count2 = G_heartbeat;
+		G_nest_data_down_table.mcs0_down += mcs0;
+		G_nest_data_down_table.mcs1_down += mcs1;
+		G_nest_data_down_table.mcs2_down += mcs2;
+		G_nest_data_down_table.mcs3_down += mcs3;
+	} else if ((G_heartbeat % 13) == 0) {
+		G_gpe_memcpy.src = (uint32_t)&G_nest_data_up_table;
+		G_gpe_memcpy.desc = NEST_MCS_UP;
+		G_gpe_memcpy.byte = 8;
+		// Do actual copying
+		pore_flex_schedule(&G_memcpy_request);
+	} else if ((G_heartbeat % 14) == 0) {
+		G_gpe_memcpy.src = (uint32_t)&G_nest_data_down_table;
+		G_gpe_memcpy.desc = NEST_MCS_DOWN;
+		G_gpe_memcpy.byte = 8;
+		// Do actual copying
+		pore_flex_schedule(&G_memcpy_request);
+	}
+}
+
 
 // Function Specification
 //

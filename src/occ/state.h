@@ -196,5 +196,13 @@ errlHndl_t SMGR_set_state(OCC_STATE i_state);
 // parms we currently know.
 uint8_t SMGR_validate_get_valid_states(void);
 
+typedef struct {
+	uint32_t	pad1;
+	uint32_t	desc;
+	uint32_t	pad2;
+	uint32_t	src;
+	uint64_t	byte;
+}GPE_memcopy;
+
 #endif
 

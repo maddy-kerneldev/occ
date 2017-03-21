@@ -27,6 +27,7 @@
 
 occ_GPEFILES = gpe/apss_init.pS \
                gpe/apss_composite.pS \
+               gpe/nest_pmu_gpe.pS \
                gpe/apss_meas_read_start.pS \
                gpe/apss_meas_read_cont.pS \
                gpe/pore_nop.pS \

@@ -51,6 +51,12 @@ extern PoreEntryPoint GPE_apss_start_pwr_meas_read;
 extern PoreEntryPoint GPE_apss_continue_pwr_meas_read;
 extern PoreEntryPoint GPE_apss_complete_pwr_meas_read;
 
+PoreFlex G_nest_initialize_PMUlets;
+extern PoreFlex G_memcpy_request;
+extern PoreEntryPoint GPE_nest_initialize_PMUlets;
+extern PoreEntryPoint GPE_memcpy;
+extern GPE_memcopy G_gpe_memcpy;
+
 //*************************************************************************
 // Macros
 //*************************************************************************
@@ -234,6 +240,23 @@ errlHndl_t apss_initialize()
                          (void*)NULL,                                 // callback arg
                          ASYNC_CALLBACK_IMMEDIATE);                   // options
 
+        pore_flex_create(&G_nest_initialize_PMUlets,
+                         &G_pore_gpe0_queue,                          // request
+                         (void*)GPE_nest_initialize_PMUlets,      // entry_point
+                         NULL,
+                         SSX_WAIT_FOREVER,                            // no timeout
+                         NULL,                                        // callback
+                         NULL,                                        // callback arg
+                         ASYNC_CALLBACK_IMMEDIATE);                   // options
+        pore_flex_schedule(&G_nest_initialize_PMUlets);
+        pore_flex_create(&G_memcpy_request,
+                         &G_pore_gpe0_queue,                          // request
+                         (void*)GPE_memcpy,      // entry_point
+                         (uint32_t)&G_gpe_memcpy,
+                         SSX_WAIT_FOREVER,                            // no timeout
+                         NULL,                                        // callback
+                         NULL,                                        // callback arg
+                         ASYNC_CALLBACK_IMMEDIATE);                   // options
     }
     else
     {

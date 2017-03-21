@@ -61,7 +61,7 @@ uint8_t _rotl8(uint8_t val, uint8_t shift)
 //*************************************************************************
 // Globals
 //*************************************************************************
-
+extern void populate_sensor_tbl_to_mem(void);
 //*************************************************************************
 // Function Prototypes
 //*************************************************************************
@@ -277,6 +277,7 @@ void task_amec_slave( task_t *i_self)
 {
   uint64_t l_start = ssx_timebase_get();
 
+  populate_sensor_tbl_to_mem();
   amec_slv_common_tasks_pre();
 
   amec_generic_smh( amec_slv_state_table, &G_amec_slv_state, &G_amec_slv_state_timings );
